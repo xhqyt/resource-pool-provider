@@ -199,7 +199,7 @@ export interface CredentialPublic {
 
 export const DEMAND_TOKEN_PREFIX = 'rcd_';
 export const PROVIDER_TOKEN_PREFIX = 'rpk_';
-export const PROVIDER_VERSION = '1.6.0';
+export const PROVIDER_VERSION = '1.6.1';
 
 // ════════════════ 云端服务器视图（L1 + 管理状态） ════════════════
 
