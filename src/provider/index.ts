@@ -32,6 +32,7 @@ class Provider {
   constructor() {
     this.config = loadConfig();
     this.governor = new SshGovernor('data');
+    this.governor.cleanupPolicy = this.config.cleanup;
   }
 
   async start(): Promise<void> {

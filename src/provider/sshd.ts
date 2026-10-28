@@ -56,6 +56,8 @@ export class SshGovernor {
   private timer?: NodeJS.Timeout;
   private lastError?: string;
 
+  cleanupPolicy?: string;
+
   constructor(
     private readonly stateDir: string,
     /** 测试注入自定义路径（默认按平台使用系统 sshd 配置路径） */
@@ -165,8 +167,32 @@ export class SshGovernor {
   }
 
   startSelfHeal(intervalMs = 60_000): void {
-    this.timer = setInterval(() => this.selfHeal(), intervalMs);
+    this.timer = setInterval(() => {
+      this.selfHeal();
+      this.cleanExpiredWorkdirs();
+    }, intervalMs);
     this.timer.unref?.();
+  }
+
+  /** 清理 retain-Nd 到期的工作目录 */
+  private cleanExpiredWorkdirs(): void {
+    try {
+      const dir = path.dirname(this.principalsFile);
+      for (const f of fs.readdirSync(dir)) {
+        if (!f.startsWith('rc-cleanup-') || !f.endsWith('.expiry')) continue;
+        const file = path.join(dir, f);
+        const expiry = Number(fs.readFileSync(file, 'utf8'));
+        if (Date.now() < expiry) continue;
+        const allocId = f.replace('rc-cleanup-', '').replace('.expiry', '');
+        const home = isWin ? process.env.USERPROFILE ?? 'C:' : process.env.HOME ?? '/root';
+        const workdir = path.join(home, 'rc-runs', allocId);
+        fs.rmSync(workdir, { recursive: true, force: true });
+        fs.rmSync(file, { force: true });
+        console.log(`[ssh] 工作目录已过期清理: ${workdir}`);
+      }
+    } catch {
+      /* noop */
+    }
   }
 
   stop(): void {
@@ -189,11 +215,22 @@ export class SshGovernor {
         await runFile('pkill', ['-f', marker]).catch(() => undefined);
       }
     } finally {
-      try {
-        fs.rmSync(dir, { recursive: true, force: true });
-        console.log(`[ssh] 分配 ${cmd.allocationId} 已清理（进程+目录）`);
-      } catch (err) {
-        console.warn(`[ssh] 分配 ${cmd.allocationId} 目录清理失败:`, (err as Error).message);
+      const policy = this.cleanupPolicy ?? 'retain';
+      if (policy === 'delete') {
+        try {
+          fs.rmSync(dir, { recursive: true, force: true });
+          console.log(`[ssh] 分配 ${cmd.allocationId} 已清理（进程+目录）`);
+        } catch (err) {
+          console.warn(`[ssh] 分配 ${cmd.allocationId} 目录清理失败:`, (err as Error).message);
+        }
+      } else {
+        const m = policy.match(/^retain-(\d+)d$/);
+        if (m) {
+          // retain-Nd：记录到期时间，janitor 定期清理
+          const expiry = path.join(path.dirname(this.principalsFile), `rc-cleanup-${cmd.allocationId}.expiry`);
+          try { fs.writeFileSync(expiry, String(Date.now() + Number(m[1]) * 86400_000)); } catch { /* noop */ }
+        }
+        console.log(`[ssh] 分配 ${cmd.allocationId} 进程已停止，目录保留（${dir}，策略=${policy}）`);
       }
     }
   }

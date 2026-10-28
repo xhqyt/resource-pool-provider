@@ -66,6 +66,7 @@ export function loadConfig(): ProviderConfig {
     intervalMs: Number(process.env.METRICS_INTERVAL_MS ?? file.intervalMs ?? 5000),
     diskPaths: file.diskPaths?.length ? file.diskPaths : [cwdRoot],
     tunneled: process.env.TUNNELED === 'true' || process.env.TUNNELED === '1' || file.tunneled === true,
+    cleanup: process.env.CLEANUP ?? file.cleanup ?? 'retain',
     ssh: {
       host: process.env.ADVERTISE_HOST ?? file.ssh?.host ?? '127.0.0.1',
       port: Number(process.env.ADVERTISE_PORT ?? file.ssh?.port ?? 22),

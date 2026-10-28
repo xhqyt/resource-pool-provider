@@ -199,7 +199,7 @@ export interface CredentialPublic {
 
 export const DEMAND_TOKEN_PREFIX = 'rcd_';
 export const PROVIDER_TOKEN_PREFIX = 'rpk_';
-export const PROVIDER_VERSION = '1.7.0';
+export const PROVIDER_VERSION = '1.8.0';
 
 // ════════════════ 云端服务器视图（L1 + 管理状态） ════════════════
 
@@ -268,4 +268,11 @@ export interface ProviderConfig {
   ssh: { host: string; port: number; user: string };
   /** 内网设备：true 时需求方经云端中继隧道访问 */
   tunneled?: boolean;
+  /**
+   * 分配结束后的工作目录策略：
+   * 'retain'（默认）= 只杀进程，保留全部文件（科研安全）
+   * 'retain-Nd'    = 保留 N 天后自动清理（如 'retain-7d'）
+   * 'delete'       = 立即清理（当前行为）
+   */
+  cleanup?: string;
 }
