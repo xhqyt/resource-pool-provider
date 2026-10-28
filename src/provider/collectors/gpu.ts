@@ -36,8 +36,17 @@ export async function queryGpus(): Promise<{ info: GpuInfo[]; metrics: GpuMetric
       if (!line.trim()) continue;
       const [index, name, total, used, free, util, temp] = line.split(',').map((s) => s.trim());
       if (index === undefined || name === undefined) continue;
-      info.push({ index: num(index), name, totalMb: num(total) });
-      metrics.push({ index: num(index), usedMb: num(used), freeMb: num(free), utilPct: num(util), tempC: num(temp) });
+      const idx = num(index);
+      const utilPct = num(util);
+      info.push({ index: idx, name, totalMb: num(total) });
+      metrics.push({
+        index: idx,
+        usedMb: num(used),
+        freeMb: num(free),
+        utilPct,
+        utilAvgPct: rollingAvg(idx, utilPct),
+        tempC: num(temp),
+      });
     }
     return { info, metrics };
   } catch {
