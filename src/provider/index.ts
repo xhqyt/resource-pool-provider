@@ -133,6 +133,12 @@ class Provider {
       case 'cleanup-allocation':
         await this.governor.cleanupAllocation(cmd);
         break;
+      case 'suspend-allocation':
+        await this.governor.suspendAllocation(cmd);
+        break;
+      case 'resume-allocation':
+        await this.governor.resumeAllocation(cmd);
+        break;
       case 'update-provider':
         this.startUpdate(cmd);
         break;

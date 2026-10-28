@@ -86,6 +86,10 @@ export type CloudCommand =
   | { type: 'principal-sync'; principals: { principal: string; expiresAt: number }[] }
   /** 分配结束：清理残留进程与工作目录 */
   | { type: 'cleanup-allocation'; allocationId: string; workDir: string }
+  /** 闲时任务被抢占：SIGSTOP 该分配的全部进程（资源让出） */
+  | { type: 'suspend-allocation'; allocationId: string }
+  /** 闲时任务恢复：SIGCONT 该分配的全部进程 */
+  | { type: 'resume-allocation'; allocationId: string }
   /** 中继隧道：云端请求供给端向本机 targetPort 建立隧道 */
   | { type: 'tunnel-open'; tunnelId: string; targetPort: number }
   /** 中继隧道：下行数据（base64 的 SSH 字节流） */
@@ -117,12 +121,16 @@ export interface CredentialQuota {
 }
 
 export type DemandStatus =
-  | 'queued'    // 排队等待资源/缓冲
-  | 'allocated' // 已分配（租约活跃，凭证与 principal 存在）
-  | 'released'  // 已释放（正常）
-  | 'expired'   // 租约到期回收
-  | 'revoked'   // 管理员强吊销
-  | 'rejected'; // 提交即被拒（超额等）
+  | 'queued'     // 排队等待资源/缓冲
+  | 'allocated'  // 已分配（租约活跃，凭证与 principal 存在）
+  | 'preempted'  // 闲时任务被正常需求抢占（进程 SIGSTOP，资源已让出）
+  | 'released'   // 已释放（正常）
+  | 'expired'    // 租约到期回收
+  | 'revoked'    // 管理员强吊销
+  | 'rejected';  // 提交即被拒（超额等）
+
+/** 任务类别：normal=独占资源保障 / idle=闲时运行，可被正常需求抢占（SIGSTOP→SIGCONT） */
+export type TaskClass = 'normal' | 'idle';
 
 export interface AllocationInfo {
   id: string;
@@ -154,6 +162,9 @@ export interface DemandRecord {
   /** 需求方公钥（OpenSSH 单行格式，公钥材料；证书签发与续租用） */
   sshPublicKey?: string;
   ttlSec: number;
+  taskClass: TaskClass;
+  /** 闲时任务被抢占的时间（用于日志/审计） */
+  preemptedAt?: number;
   status: DemandStatus;
   rejectReason?: string;
   createdAt: number;
@@ -199,7 +210,7 @@ export interface CredentialPublic {
 
 export const DEMAND_TOKEN_PREFIX = 'rcd_';
 export const PROVIDER_TOKEN_PREFIX = 'rpk_';
-export const PROVIDER_VERSION = '1.8.0';
+export const PROVIDER_VERSION = '1.9.0';
 
 // ════════════════ 云端服务器视图（L1 + 管理状态） ════════════════
 
@@ -209,6 +220,9 @@ export interface AllocatableView {
   diskFreeGb: number;
   reservedGpuMb: number;
   reservedMemMb: number;
+  /** 闲时任务的软预留（可被正常需求抢占） */
+  idleReservedGpuMb?: number;
+  idleReservedMemMb?: number;
   activeAllocations: number;
 }
 

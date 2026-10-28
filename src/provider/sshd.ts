@@ -200,6 +200,47 @@ export class SshGovernor {
   }
 
   /**
+   * 闲时任务抢占：SIGSTOP 该分配的全部进程（冻结状态，显存/CPU 释放但不杀进程）。
+   * Linux: kill -STOP；Windows: 无直接等价（用 PowerShell Suspend-Process 替代）。
+   */
+  async suspendAllocation(cmd: Extract<CloudCommand, { type: 'suspend-allocation' }>): Promise<void> {
+    const marker = cmd.allocationId;
+    try {
+      if (isWin) {
+        await run(
+          `powershell -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*${marker}*' } | ForEach-Object { $p = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue; if ($p) { $p.PriorityClass = 'Idle' } }"`,
+          { timeout: 15_000, windowsHide: true },
+        ).catch(() => undefined);
+        console.log(`[ssh] 闲时任务 ${cmd.allocationId} 已降级（Windows 无 SIGSTOP，降为最低优先级）`);
+      } else {
+        await runFile('pkill', ['-STOP', '-f', `rc-runs/${marker}`]).catch(() => undefined);
+        console.log(`[ssh] 闲时任务 ${cmd.allocationId} 已挂起（SIGSTOP）`);
+      }
+    } catch (err) {
+      console.warn(`[ssh] 挂起 ${cmd.allocationId} 失败:`, (err as Error).message);
+    }
+  }
+
+  /** 闲时任务恢复：SIGCONT 从冻结点继续执行 */
+  async resumeAllocation(cmd: Extract<CloudCommand, { type: 'resume-allocation' }>): Promise<void> {
+    const marker = cmd.allocationId;
+    try {
+      if (isWin) {
+        await run(
+          `powershell -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*${marker}*' } | ForEach-Object { $p = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue; if ($p) { $p.PriorityClass = 'Normal' } }"`,
+          { timeout: 15_000, windowsHide: true },
+        ).catch(() => undefined);
+        console.log(`[ssh] 闲时任务 ${cmd.allocationId} 已恢复（Windows：恢复优先级）`);
+      } else {
+        await runFile('pkill', ['-CONT', '-f', `rc-runs/${marker}`]).catch(() => undefined);
+        console.log(`[ssh] 闲时任务 ${cmd.allocationId} 已恢复（SIGCONT）`);
+      }
+    } catch (err) {
+      console.warn(`[ssh] 恢复 ${cmd.allocationId} 失败:`, (err as Error).message);
+    }
+  }
+
+  /**
    * 分配结束处理：科研安全——只关闭 SSH 访问（云端已吊销 principal/隧道），
    * 不杀正在运行的进程（实验可能跑到一半），不删工作目录。
    * 目录清理由 cleanup 策略控制；杀进程仅由用户主动 stop 触发。
