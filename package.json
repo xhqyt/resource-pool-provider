@@ -1,0 +1,20 @@
+{
+  "name": "resource-pool-provider",
+  "version": "1.1.0",
+  "description": "资源池供给端：向云端控制台注册本机资源（GPU/内存/存储），并按云端治理 SSH 访问；支持 enroll 一键接入与内网穿透",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/provider/index.ts"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "tsx": "^4.19.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.3"
+  }
+}

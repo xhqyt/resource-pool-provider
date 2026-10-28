@@ -1,0 +1,9 @@
+{
+  "consoleUrl": "wss://<由管理员引导串自动写入>",
+  "token": "rpk_你的供给凭证",
+  "intervalMs": 5000,
+  "diskPaths": ["/"],
+  "tunneled": false,
+  "ssh": { "host": "本机可达地址", "port": 22, "user": "root" },
+  "_说明": "通常无需手写此文件——用管理员给的引导串运行 --enroll 会自动生成。tunneled=true 为内网穿透模式（无需公网/入站端口）；diskPaths 为上报磁盘；ssh 为需求方直连信息（内网模式下 host 仅作展示）"
+}
