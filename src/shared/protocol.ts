@@ -19,7 +19,10 @@ export interface GpuMetric {
   index: number;
   usedMb: number;
   freeMb: number;
+  /** 瞬时利用率（本次采样） */
   utilPct: number;
+  /** 60 秒滚动平均利用率（平滑瞬时抖动） */
+  utilAvgPct?: number;
   tempC: number;
 }
 
@@ -48,6 +51,11 @@ export interface ServerStaticInfo {
    * 全部不可达时走云端中继。内网设备（tunneled）同样可含局域网/IPv6 地址实现同网或 v6 直连。
    */
   direct: { host: string; port: number; kind: 'lan' | 'ipv6' | 'public' }[];
+  /**
+   * 统一内存设备（GB10/DGX Spark 等）：GPU 显存与系统内存为同一物理池，
+   * 调度上 CPU/GPU 需求共池扣减并预留 OS 余量
+   */
+  unifiedMemory?: boolean;
   /**
    * true = 内网设备：无法公网直连，需求方优先探测 direct（同网/v6），兜底走云端中继隧道
    * （隧道仅转发 SSH 字节流，SSH 协议自身端到端加密，云端不可解密）
@@ -191,7 +199,7 @@ export interface CredentialPublic {
 
 export const DEMAND_TOKEN_PREFIX = 'rcd_';
 export const PROVIDER_TOKEN_PREFIX = 'rpk_';
-export const PROVIDER_VERSION = '1.5.0';
+export const PROVIDER_VERSION = '1.6.0';
 
 // ════════════════ 云端服务器视图（L1 + 管理状态） ════════════════
 
@@ -217,6 +225,8 @@ export interface ServerView extends ServerStaticInfo {
   settlingUntil: number;
   /** 归属：注册凭证名称（credential:xxx）或 system（全局 AGENT_TOKEN） */
   owner: string;
+  /** 管理备注（云端持久化，operator 可编辑） */
+  note?: string;
 }
 
 // ════════════════ 前端事件（WS /ws/ui） ════════════════

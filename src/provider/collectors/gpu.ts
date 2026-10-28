@@ -11,6 +11,18 @@ function num(v: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/** 每卡利用率滚动窗口（60s @ 5s 采样 = 12 点），用于平滑瞬时抖动 */
+const utilWindow = new Map<number, number[]>();
+const UTIL_WINDOW_SIZE = 12;
+
+function rollingAvg(index: number, utilPct: number): number {
+  const buf = utilWindow.get(index) ?? [];
+  buf.push(utilPct);
+  if (buf.length > UTIL_WINDOW_SIZE) buf.splice(0, buf.length - UTIL_WINDOW_SIZE);
+  utilWindow.set(index, buf);
+  return Math.round(buf.reduce((a, b) => a + b, 0) / buf.length);
+}
+
 /** nvidia-smi 采集；无 NVIDIA GPU 返回空 */
 export async function queryGpus(): Promise<{ info: GpuInfo[]; metrics: GpuMetric[] }> {
   try {

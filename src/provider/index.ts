@@ -185,6 +185,10 @@ class Provider {
       ssh: this.config.ssh,
       direct: collectDirectAddresses(this.config.ssh),
       tunneled: this.config.tunneled === true,
+      // 统一内存设备（GB10/DGX Spark 等）：显存总量≈系统内存总量 → 同一物理池
+      unifiedMemory:
+        this.gpuInfo.length > 0 &&
+        this.gpuInfo[0]!.totalMb >= Math.round(os.totalmem() / 1024 / 1024) * 0.8,
     };
   }
 
