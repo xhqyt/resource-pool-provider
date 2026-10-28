@@ -25,6 +25,7 @@ class Provider {
   private reconnectDelay = 1000;
   private metricsTimer?: NodeJS.Timeout;
   private gpuInfo: Awaited<ReturnType<typeof queryGpus>>['info'] = [];
+  private umaFallback = false;
   private readonly governor: SshGovernor;
   private tunnel: TunnelBridge | null = null;
 
@@ -34,7 +35,9 @@ class Provider {
   }
 
   async start(): Promise<void> {
-    this.gpuInfo = (await queryGpus()).info;
+    const q = await queryGpus();
+    this.gpuInfo = q.info;
+    this.umaFallback = q.umaFallback === true;
     console.log(`[provider] 供给节点 ${this.serverId()} 启动 → ${this.config.consoleUrl}`);
     console.log(`[provider] GPU: ${this.gpuInfo.length ? this.gpuInfo.map((g) => g.name).join(', ') : '未检测到 NVIDIA GPU'}`);
     if (this.config.tunneled) {
@@ -190,8 +193,9 @@ class Provider {
       unifiedMemory:
         this.gpuInfo.length > 0 &&
         process.arch === 'arm64' &&
-        Math.abs(this.gpuInfo[0]!.totalMb - Math.round(os.totalmem() / 1024 / 1024)) /
-          Math.round(os.totalmem() / 1024 / 1024) < 0.05,
+        (this.umaFallback ||
+          Math.abs(this.gpuInfo[0]!.totalMb - Math.round(os.totalmem() / 1024 / 1024)) /
+            Math.round(os.totalmem() / 1024 / 1024) < 0.05),
     };
   }
 
