@@ -185,10 +185,13 @@ class Provider {
       ssh: this.config.ssh,
       direct: collectDirectAddresses(this.config.ssh),
       tunneled: this.config.tunneled === true,
-      // 统一内存设备（GB10/DGX Spark 等）：显存总量≈系统内存总量 → 同一物理池
+      // 统一内存设备（GB10/DGX Spark 等）：ARM 平台（Grace）且显存总量≈系统内存总量（同一物理池）
+      // x86 工作站（大独显+大内存）不满足架构条件，不会被误判
       unifiedMemory:
         this.gpuInfo.length > 0 &&
-        this.gpuInfo[0]!.totalMb >= Math.round(os.totalmem() / 1024 / 1024) * 0.8,
+        process.arch === 'arm64' &&
+        Math.abs(this.gpuInfo[0]!.totalMb - Math.round(os.totalmem() / 1024 / 1024)) /
+          Math.round(os.totalmem() / 1024 / 1024) < 0.05,
     };
   }
 
