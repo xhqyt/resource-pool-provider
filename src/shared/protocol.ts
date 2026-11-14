@@ -74,6 +74,8 @@ export interface ServerMetrics {
 export type ServerMessage =
   | { type: 'register'; info: ServerStaticInfo }
   | { type: 'metrics'; metrics: ServerMetrics }
+  /** 供给端上报：各分配的进程存活状态（是否已完成） */
+  | { type: 'task-status'; statuses: { allocationId: string; running: boolean; pid?: number }[] }
   /** 中继隧道：上行数据（base64 的 SSH 字节流，SSH 自身端到端加密） */
   | { type: 'tunnel-data'; tunnelId: string; payload: string }
   /** 中继隧道：供给端侧关闭（目标连接断开等） */
@@ -121,8 +123,10 @@ export interface CredentialQuota {
 }
 
 export type DemandStatus =
+  | 'gated'      // 闸门中等待管理员放行
   | 'queued'     // 排队等待资源/缓冲
   | 'allocated'  // 已分配（租约活跃，凭证与 principal 存在）
+  | 'suspended'  // 管理员挂起（吊销 principal + SIGSTOP）
   | 'preempted'  // 闲时任务被正常需求抢占（进程 SIGSTOP，资源已让出）
   | 'released'   // 已释放（正常）
   | 'expired'    // 租约到期回收
@@ -165,6 +169,11 @@ export interface DemandRecord {
   taskClass: TaskClass;
   /** 闲时任务被抢占的时间（用于日志/审计） */
   preemptedAt?: number;
+  suspendedAt?: number;
+  priority?: number;
+  /** 进程是否仍在运行（供给端上报） */
+  processRunning?: boolean;
+  processPid?: number;
   status: DemandStatus;
   rejectReason?: string;
   createdAt: number;

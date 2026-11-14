@@ -10,6 +10,8 @@ import { diskMetricsAuto } from './collectors/disk.js';
 import { SshGovernor } from './sshd.js';
 import { TunnelBridge } from './tunnel.js';
 import { collectDirectAddresses } from './addresses.js';
+import { execFile } from 'node:child_process';
+const runFile = (await import('node:util')).promisify(execFile);
 
 /**
  * 供给端守护进程（数据面）：
@@ -128,6 +130,8 @@ class Provider {
         if (removed || added) {
           console.log(`[provider] principal 对账: +${added} / -${removed}（当前 ${cmd.principals.length} 条）`);
         }
+        // 记录活跃分配 ID（用于进程状态上报）
+        this.knownAllocations = new Set(cmd.principals.map((p) => p.principal.replace('rc-alloc-', '')));
         break;
       }
       case 'cleanup-allocation':
@@ -206,6 +210,28 @@ class Provider {
     };
   }
 
+  /** 已知分配的进程状态缓存（从 principal-sync 推送的 allocationId 提取） */
+  private knownAllocations = new Set<string>();
+
+  /** 扫描本机分配进程存活状态并上报云端 */
+  private async reportTaskStatus(): Promise<void> {
+    if (!this.connected || this.knownAllocations.size === 0) return;
+    const statuses: { allocationId: string; running: boolean; pid?: number }[] = [];
+    for (const allocId of this.knownAllocations) {
+      try {
+        const marker = `rc-runs/alloc-` + allocId.replace('alloc-', '');
+        const { stdout } = await runFile('pgrep', ['-f', marker]).catch(() => ({ stdout: '' }));
+        const pids = stdout.trim().split('\n').filter(Boolean).map(Number);
+        statuses.push({ allocationId: allocId, running: pids.length > 0, pid: pids[0] });
+      } catch {
+        statuses.push({ allocationId: allocId, running: false });
+      }
+    }
+    if (statuses.length > 0) {
+      this.send({ type: 'task-status', statuses });
+    }
+  }
+
   private async reportMetrics(): Promise<void> {
     if (!this.connected) return;
     const metrics: ServerMetrics = {
@@ -215,6 +241,8 @@ class Provider {
       disks: await diskMetricsAuto(this.config.diskPaths),
     };
     this.send({ type: 'metrics', metrics });
+    // 顺带上报任务进程状态
+    void this.reportTaskStatus();
   }
 }
 
