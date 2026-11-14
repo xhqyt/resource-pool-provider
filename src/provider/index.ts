@@ -4,8 +4,9 @@ import fs from 'node:fs';
 import type { CloudCommand, ProviderConfig, ServerMetrics, ServerStaticInfo, ServerMessage } from '../shared/protocol.js';
 import { PROVIDER_VERSION } from '../shared/protocol.js';
 import { loadConfig } from './config.js';
-import { queryGpus } from './collectors/gpu.js';
+import { queryGpus, queryGpuProcesses } from './collectors/gpu.js';
 import { memoryMetric } from './collectors/memory.js';
+import { cpuMetric } from './collectors/cpu.js';
 import { diskMetricsAuto } from './collectors/disk.js';
 import { SshGovernor } from './sshd.js';
 import { TunnelBridge } from './tunnel.js';
@@ -216,13 +217,20 @@ class Provider {
   /** 扫描本机分配进程存活状态并上报云端 */
   private async reportTaskStatus(): Promise<void> {
     if (!this.connected || this.knownAllocations.size === 0) return;
+    const home = os.homedir();
     const statuses: { allocationId: string; running: boolean; pid?: number }[] = [];
     for (const allocId of this.knownAllocations) {
       try {
-        const marker = `rc-runs/alloc-` + allocId.replace('alloc-', '');
-        const { stdout } = await runFile('pgrep', ['-f', marker]).catch(() => ({ stdout: '' }));
-        const pids = stdout.trim().split('\n').filter(Boolean).map(Number);
-        statuses.push({ allocationId: allocId, running: pids.length > 0, pid: pids[0] });
+        // 读 CLI 写入的 .pid 文件检查进程存活（比 pgrep 可靠）
+        const pidFile = `${home}/rc-runs/${allocId}/.pid`;
+        const pidStr = fs.readFileSync(pidFile, 'utf8').trim();
+        const pid = Number(pidStr);
+        if (pid > 0) {
+          process.kill(pid, 0); // 仅检查存活，不发信号
+          statuses.push({ allocationId: allocId, running: true, pid });
+        } else {
+          statuses.push({ allocationId: allocId, running: false });
+        }
       } catch {
         statuses.push({ allocationId: allocId, running: false });
       }
@@ -232,17 +240,30 @@ class Provider {
     }
   }
 
+  /** 上报 GPU 进程列表（哪些进程占了多少显存） */
+  private async reportGpuProcesses(): Promise<void> {
+    if (!this.connected) return;
+    try {
+      const procs = await queryGpuProcesses();
+      if (procs.length > 0) {
+        this.send({ type: 'task-status', statuses: [] , gpuProcesses: procs });
+      }
+    } catch { /* ignore */ }
+  }
+
   private async reportMetrics(): Promise<void> {
     if (!this.connected) return;
     const metrics: ServerMetrics = {
       ts: Date.now(),
       ...memoryMetric(),
+      ...cpuMetric(),
       gpus: (await queryGpus()).metrics,
       disks: await diskMetricsAuto(this.config.diskPaths),
     };
     this.send({ type: 'metrics', metrics });
-    // 顺带上报任务进程状态
+    // 顺带上报任务进程状态 + GPU 进程（standby 判定用）
     void this.reportTaskStatus();
+    void this.reportGpuProcesses();
   }
 }
 

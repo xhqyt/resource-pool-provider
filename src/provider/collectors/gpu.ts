@@ -29,6 +29,31 @@ function rollingAvg(index: number, utilPct: number): number {
  * 统一内存设备（GB10/DGX Spark）：nvidia-smi 的显存字段为 [N/A]，
  * 用系统内存池近似（UMA 上 GPU 显存与系统内存本就是同一物理池）。
  */
+export interface GpuProcess {
+  pid: number;
+  name: string;
+  memMb: number;
+}
+
+/** 查询 GPU 上的进程及显存占用（用于 standby 判定） */
+export async function queryGpuProcesses(): Promise<GpuProcess[]> {
+  try {
+    const { stdout } = await run(
+      'nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader,nounits',
+      { timeout: 5000, windowsHide: true },
+    );
+    const procs: GpuProcess[] = [];
+    for (const line of stdout.trim().split('\n')) {
+      const [pid, name, mem] = line.split(',').map((x) => x.trim());
+      if (!pid || !name) continue;
+      procs.push({ pid: Number(pid) || 0, name: name.split('/').pop() || name, memMb: Number(mem) || 0 });
+    }
+    return procs;
+  } catch {
+    return [];
+  }
+}
+
 export async function queryGpus(): Promise<{ info: GpuInfo[]; metrics: GpuMetric[]; umaFallback?: boolean }> {
   try {
     const { stdout } = await run(`nvidia-smi --query-gpu=${QUERY} --format=csv,noheader,nounits`, {
@@ -40,7 +65,7 @@ export async function queryGpus(): Promise<{ info: GpuInfo[]; metrics: GpuMetric
     let umaFallback = false;
     const sysTotalMb = Math.round(os.totalmem() / 1024 / 1024);
     const sysFreeMb = Math.round(os.freemem() / 1024 / 1024);
-    for (const line of stdout.trim().split(/\r?\n/)) {
+    for (const line of stdout.trim().split(String.fromCharCode(10))) {
       if (!line.trim()) continue;
       const [index, name, total, used, free, util, temp] = line.split(',').map((s) => s.trim());
       if (index === undefined || name === undefined) continue;

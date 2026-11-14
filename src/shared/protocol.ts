@@ -67,6 +67,8 @@ export interface ServerMetrics {
   ts: number;
   memTotalMb: number;
   memFreeMb: number;
+  /** CPU 利用率（0-100，所有核心平均） */
+  cpuPct?: number;
   gpus: GpuMetric[];
   disks: DiskMetric[];
 }
@@ -75,7 +77,7 @@ export type ServerMessage =
   | { type: 'register'; info: ServerStaticInfo }
   | { type: 'metrics'; metrics: ServerMetrics }
   /** 供给端上报：各分配的进程存活状态（是否已完成） */
-  | { type: 'task-status'; statuses: { allocationId: string; running: boolean; pid?: number }[] }
+  | { type: 'task-status'; statuses: { allocationId: string; running: boolean; pid?: number }[]; gpuProcesses?: { pid: number; name: string; memMb: number }[] }
   /** 中继隧道：上行数据（base64 的 SSH 字节流，SSH 自身端到端加密） */
   | { type: 'tunnel-data'; tunnelId: string; payload: string }
   /** 中继隧道：供给端侧关闭（目标连接断开等） */
@@ -250,6 +252,14 @@ export interface ServerView extends ServerStaticInfo {
   owner: string;
   /** 管理备注（云端持久化，operator 可编辑） */
   note?: string;
+  /** 服务器三态：busy=计算中 / idle=完全空闲 / standby=显存被占但无计算（如已加载的模型未推理） */
+  serverState: 'busy' | 'idle' | 'standby';
+  /** 旧字段（兼容）：等价于 serverState === 'idle' */
+  idle: boolean;
+  /** 持续闲置的起始时间（时间戳） */
+  idleSince?: number;
+  /** standby 状态下占用显存的进程摘要（如 ollama runner 18GB） */
+  gpuHolders?: { name: string; memMb: number }[];
 }
 
 // ════════════════ 前端事件（WS /ws/ui） ════════════════
