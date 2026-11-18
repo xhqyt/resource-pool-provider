@@ -33,7 +33,8 @@ if [ "$pull_ok" != "1" ]; then
     echo "云端发布包下载失败，更新中止"
     exit 1
   fi
-  tar -xzf /tmp/rc-rel.tar.gz --strip-components=1 -C . && rm -f /tmp/rc-rel.tar.gz
+  # 解包时保护本地配置（发布包不应含 provider.config.json，双保险）
+  tar -xzf /tmp/rc-rel.tar.gz --strip-components=1 -C . --exclude=provider.config.json && rm -f /tmp/rc-rel.tar.gz
 fi
 
 echo "--- npm install"
