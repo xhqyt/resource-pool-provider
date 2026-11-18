@@ -253,11 +253,14 @@ class Provider {
 
   private async reportMetrics(): Promise<void> {
     if (!this.connected) return;
+    const gpus = (await queryGpus()).metrics;
+    const totalPowerW = gpus.reduce((sum, g) => sum + (g.powerW ?? 0), 0);
     const metrics: ServerMetrics = {
       ts: Date.now(),
       ...memoryMetric(),
       ...cpuMetric(),
-      gpus: (await queryGpus()).metrics,
+      gpus,
+      totalPowerW: totalPowerW > 0 ? Math.round(totalPowerW * 10) / 10 : undefined,
       disks: await diskMetricsAuto(this.config.diskPaths),
     };
     this.send({ type: 'metrics', metrics });

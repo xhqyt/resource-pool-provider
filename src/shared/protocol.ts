@@ -24,6 +24,12 @@ export interface GpuMetric {
   /** 60 秒滚动平均利用率（平滑瞬时抖动） */
   utilAvgPct?: number;
   tempC: number;
+  /** 瞬时功耗（W）；GB10/部分卡可能无 power limit 但 draw 可用 */
+  powerW?: number;
+  /** 功耗上限（W）；GB10 等统一内存设备为 undefined */
+  powerLimitW?: number;
+  /** 60 秒滚动平均功耗（W） */
+  powerAvgW?: number;
 }
 
 export interface DiskMetric {
@@ -69,6 +75,8 @@ export interface ServerMetrics {
   memFreeMb: number;
   /** CPU 利用率（0-100，所有核心平均） */
   cpuPct?: number;
+  /** 节点总功耗（W）：所有 GPU 功耗之和 */
+  totalPowerW?: number;
   gpus: GpuMetric[];
   disks: DiskMetric[];
 }
@@ -173,9 +181,16 @@ export interface DemandRecord {
   preemptedAt?: number;
   suspendedAt?: number;
   priority?: number;
-  /** 进程是否仍在运行（供给端上报） */
   processRunning?: boolean;
   processPid?: number;
+  /** 指定目标服务器（数据依赖：数据/模型在此机器本地） */
+  targetNode?: string;
+  /** 多节点协同：需要几台服务器（默认 1；>1 时为 gang 调度，原子分配） */
+  nodeCount?: number;
+  /** gang 组 ID（同组需求原子分配/释放） */
+  groupId?: string;
+  /** gang 组内序号（0=master） */
+  groupIndex?: number;
   status: DemandStatus;
   rejectReason?: string;
   createdAt: number;
@@ -221,7 +236,7 @@ export interface CredentialPublic {
 
 export const DEMAND_TOKEN_PREFIX = 'rcd_';
 export const PROVIDER_TOKEN_PREFIX = 'rpk_';
-export const PROVIDER_VERSION = '2.0.0';
+export const PROVIDER_VERSION = '2.1.0';
 
 // ════════════════ 云端服务器视图（L1 + 管理状态） ════════════════
 
